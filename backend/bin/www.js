@@ -6,6 +6,9 @@
 const debug = require('debug')('backend:server');
 const http = require('http');
 const app = require('../app');
+const { socket } = require('../lib/socket');
+
+require('dotenv').config();
 
 /**
  * Normalize a port into a number, string, or false.
@@ -35,16 +38,16 @@ function onError(error) {
     }
 
     const bind = typeof port === 'string'
-        ? `Pipe ${port}`
-        : `Port ${port}`;
+        ? `Pipe ${ port }`
+        : `Port ${ port }`;
 
     // handle specific listen errors with friendly messages
     switch (error.code) {
     case 'EACCES':
-        console.error(`${bind} requires elevated privileges`);
+        console.error(`${ bind } requires elevated privileges`);
         process.exit(1);
     case 'EADDRINUSE':
-        console.error(`${bind} is already in use`);
+        console.error(`${ bind } is already in use`);
         process.exit(1);
     default:
         throw error;
@@ -57,9 +60,9 @@ function onError(error) {
 function onListening() {
     const addr = server.address();
     const bind = typeof addr === 'string'
-        ? `pipe ${addr}`
-        : `port ${addr.port}`;
-    debug(`Listening on ${bind}`);
+        ? `pipe ${ addr }`
+        : `port ${ addr.port }`;
+    debug(`Listening on ${ bind }`);
 }
 
 /**
@@ -72,6 +75,7 @@ app.set('port', port);
  * Create HTTP server.
  */
 const server = http.createServer(app);
+socket(server);
 
 /**
  * Listen on provided port, on all network interfaces.
