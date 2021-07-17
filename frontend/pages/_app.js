@@ -1,9 +1,8 @@
-/* eslint-disable class-methods-use-this */
 import { PureComponent } from 'react';
-import '../styles/globals.css';
+import '../styles/globals.scss';
 import socket from '../lib/socket';
 
-class MyApp extends PureComponent {
+class App extends PureComponent {
     componentDidMount() {
         const sessionID = localStorage.getItem('sessionID');
         if (sessionID) {
@@ -30,4 +29,4 @@ class MyApp extends PureComponent {
     }
 }
 
-export default MyApp;
+export default App;

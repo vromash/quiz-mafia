@@ -1,4 +1,6 @@
 /* eslint-disable max-classes-per-file */
+const { GameController } = require('./gameController');
+
 class Store {
     find(id) { }
 
@@ -10,12 +12,7 @@ class Store {
 class InMemoryStore extends Store {
     constructor() {
         super();
-        this.elements = this.createStorage();
-    }
-
-    // eslint-disable-next-line class-methods-use-this
-    createStorage() {
-        return new Map();
+        this.elements = new Map();
     }
 
     find(id) {
@@ -29,8 +26,26 @@ class InMemoryStore extends Store {
     findAll() {
         return [...this.elements.values()];
     }
+
+    delete(id) {
+        this.elements.delete(id);
+    }
+}
+
+class InMemoryGameControllerStore extends InMemoryStore {
+    findWithStatus(status) {
+        return this.findAll().filter((gc) => gc.status !== status);
+    }
+
+    findNotFinished() {
+        return [
+            ...this.findWithStatus(GameController.phases.pending),
+            ...this.findWithStatus(GameController.phases.active)
+        ];
+    }
 }
 
 module.exports = {
-    InMemoryStore
+    InMemoryStore,
+    InMemoryGameControllerStore
 };

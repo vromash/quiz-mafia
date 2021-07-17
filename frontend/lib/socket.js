@@ -12,10 +12,22 @@ socket.on('connect_error', (err) => {
     }, 1000);
 });
 
-socket.on('playerJoined', (newUser) => {
+socket.on('playerJoined', (user) => {
     let players = JSON.parse(localStorage.getItem('players'));
     if (!players) players = [];
-    players.push(newUser);
+
+    players.push(user);
+
+    localStorage.setItem('players', JSON.stringify(players));
+    window.dispatchEvent(new Event('storage'));
+});
+
+socket.on('playerLeft', (userId) => {
+    let players = JSON.parse(localStorage.getItem('players'));
+    if (!players) players = [];
+
+    players = players.filter(({ id }) => id !== userId);
+
     localStorage.setItem('players', JSON.stringify(players));
     window.dispatchEvent(new Event('storage'));
 });

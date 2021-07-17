@@ -1,14 +1,15 @@
-import Head from 'next/head';
 import { PureComponent } from 'react';
 import { withRouter } from 'next/router';
 import socket from '../lib/socket';
+import Layout from '../components/Layout/Layout';
+import styles from '../styles/Home.module.scss';
 
 class Home extends PureComponent {
     constructor(props) {
         super(props);
 
         this.state = {
-            username: 'Pinta',
+            username: '',
             rooms: 0,
             roomName: ''
         };
@@ -17,6 +18,10 @@ class Home extends PureComponent {
     componentDidMount() {
         socket.on('gameCreated', this.redirectToGamePage);
         socket.on('gameJoined', this.redirectToGamePage);
+        socket.on('rooms', (rooms) => {
+            console.log(rooms);
+            this.setState({ rooms });
+        });
         socket.on('newGameCreated', () => {
             this.setState((prevState) => ({
                 rooms: prevState.rooms + 1
@@ -41,15 +46,6 @@ class Home extends PureComponent {
         socket.emit('newGame', { username: this.state.username });
     }
 
-    renderCreateGame = () => (
-        <>
-            <div>Wanna create new game?</div>
-            <button type="button" onClick={this.handleCreateGame}>
-                Create
-            </button>
-        </>
-    );
-
     handleRoomNameChange = (event) => {
         this.setState(() => ({
             roomName: event.target.value
@@ -65,40 +61,72 @@ class Home extends PureComponent {
         this.props.router.push(`/game/${roomName}`);
     }
 
-    renderJoinGame = () => (
-        <>
-            <div>Wanna join existing game?</div>
-            <input type="text" value={this.state.roomName} onChange={this.handleRoomNameChange}></input>
-            <button type="button" onClick={this.handleJoinGame}>
-                Join
-            </button>
-        </>
-    );
-
-    renderActiveRoomNumber = () => (
-        <>
-            Current active games: {this.state.rooms}
-        </>
-    );
-
-    render() {
+    renderWelcome() {
         return (
             <>
-                <Head>
-                    <title>Welcome to Quiz Mafia</title>
-                    <meta name="description" content="Try to beat your friends!" />
-                    <link rel="icon" href="/favicon.ico" />
-                </Head>
+                <h1 className={styles.title}>Welcome to Quiz Mafia</h1>
+                <p className={styles.description}>Create new game or join existing</p>
+            </>
+        );
+    }
 
-                <div>Enter username!</div>
-                <input type="text" value={this.state.username} onChange={this.handleUsernameChange}></input>
-                <div>
+    renderUsername() {
+        return (
+            <div className={styles.username}>
+                <h2>Enter username first!</h2>
+                <input className={styles.input} type="text" value={this.state.username} onChange={this.handleUsernameChange} placeholder="Pinta "></input>
+            </div>
+        );
+    }
+
+    renderCreateGame() {
+        return (
+            <div className={styles.column_el}>
+                <button className={styles.card} type="button" onClick={this.handleCreateGame}>
+                    <h2 className={styles.create}>Create new game &rarr;</h2>
+                </button>
+            </div>
+        );
+    }
+
+    renderJoinGame() {
+        return (
+            <div className={styles.column_el}>
+                <div className={styles.card} type="button">
+                    <button type="button" onClick={this.handleJoinGame}><h2>Join existing game &rarr;</h2></button>
+                    <input className={styles.input} type="text" value={this.state.roomName} onChange={this.handleRoomNameChange} placeholder="12345" />
+                </div>
+            </div>
+        );
+    }
+
+    renderActiveRoomNumber() {
+        return (
+            <>
+                Current active games: {this.state.rooms}
+            </>
+        );
+    }
+
+    renderGrid() {
+        return (
+            <div className={styles.grid}>
+                {this.renderUsername()}
+                <div className={styles.columns}>
                     {this.renderCreateGame()}
                     {this.renderJoinGame()}
                 </div>
+            </div>
+        );
+    }
 
+    render() {
+        return (
+            <Layout>
+                {this.renderWelcome()}
+                {this.renderGrid()}
                 {this.renderActiveRoomNumber()}
-            </>
+            </Layout>
         );
     }
 }

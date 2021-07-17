@@ -1,11 +1,10 @@
-/* eslint-disable no-console */
 /* eslint-disable no-param-reassign */
 const socketIO = require('socket.io');
 const randomString = require('crypto-random-string');
-const { InMemoryStore } = require('./store');
+const { InMemoryStore, InMemoryGameControllerStore } = require('./store');
 const { GameController } = require('./gameController');
 
-const roomStore = new InMemoryStore();
+const gameStore = new InMemoryGameControllerStore();
 const sessionStore = new InMemoryStore();
 
 module.exports = {
@@ -41,7 +40,7 @@ module.exports = {
                 const gc = new GameController(roomName);
 
                 gc.addUser(client.userID, username);
-                roomStore.save(roomName, gc);
+                gameStore.save(roomName, gc);
 
                 // Informing sender
                 client.join(roomName);
@@ -53,50 +52,68 @@ module.exports = {
 
             const handleJoinGame = ({ roomName, username }) => {
                 // Updating gc in store
-                const gc = roomStore.find(roomName);
+                const gc = gameStore.find(roomName);
                 gc.addUser(client.userID, username);
-                roomStore.save(roomName, gc);
+                gameStore.save(roomName, gc);
 
-                const allPlayers = Array.from(
-                    gc.getAllPlayers(),
-                    ([name, value]) => ({ id: name, username: value })
-                );
+                const allPlayers = gc.getAllPlayers();
 
-                // Joining room and informing users
+                // Join room and inform users
                 client.join(roomName);
                 io.to(client.id).emit('gameJoined', { roomName, allPlayers });
                 client.in(roomName).emit('playerJoined', { id: client.userID, username });
             };
 
-            // console.log(sessionStore);
+            const handleLeaveGame = ({ roomName }) => {
+                const gc = gameStore.find(roomName);
+                gc.removeUser(client.userID);
+                gameStore.save(roomName, gc);
 
-            sessionStore.save(client.sessionID, {
-                userID: client.userID,
-                connected: true
-            });
+                // Leave room and inform users
+                client.leave(roomName);
+                io.to(client.id).emit('gameLeft', { roomName });
+                client.in(roomName).emit('playerLeft', client.userID);
 
-            client.emit('session', {
-                sessionID: client.sessionID,
-                userID: client.userID
-            });
+                // Finish game if not players left
+                if (gc.getAllPlayers().length <= 0) {
+                    gc.updateStatus(GameController.phases.finished);
+                    gameStore.save(roomName, gc);
+                    client.emit('playerLeft', client.userID);
+                }
+            };
+
+            const handleConnect = () => {
+                // Add or update session in db
+                sessionStore.save(client.sessionID, {
+                    userID: client.userID,
+                    connected: true
+                });
+
+                // Send session data to user
+                client.emit('session', {
+                    sessionID: client.sessionID,
+                    userID: client.userID
+                });
+
+                client.emit('rooms', gameStore.findNotFinished().length);
+                console.log('connected!');
+            };
+
+            const handleDisconnect = () => {
+                // TODO: add cron to remove room after last player disconnected
+
+                sessionStore.save(client.sessionID, {
+                    userID: client.userID,
+                    connected: false
+                });
+            };
+
+            handleConnect();
 
             client.on('newGame', handleNewGame);
             client.on('joinGame', handleJoinGame);
-
-            console.log('connected!');
-
-            // socket.emit('users', users);
-
-            // notify existing users
-            client.broadcast.emit('userConnected', {
-                userID: client.userID,
-                username: client.username
-            });
-
-            // notify users upon disconnection
-            client.on('disconnect', () => {
-                client.broadcast.emit('userDisconnected', client.id);
-            });
+            client.on('leaveGame', handleLeaveGame);
+            client.on('disconnect', handleDisconnect);
         });
     }
 };

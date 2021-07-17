@@ -8,10 +8,16 @@
 // }
 
 class GameController {
+    static phases = {
+        pending: 0,
+        active: 1,
+        finished: 2
+    };
+
     constructor(room) {
         this.room = room;
         this.players = new Map();
-        this.status = '';
+        this.status = GameController.phases.pending;
     }
 
     addUser(id, username) {
@@ -20,7 +26,10 @@ class GameController {
     }
 
     getAllPlayers() {
-        return this.players;
+        return Array.from(
+            this.players,
+            ([name, value]) => ({ id: name, username: value })
+        );
     }
 
     removeUser(id) {
