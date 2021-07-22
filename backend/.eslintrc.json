@@ -14,9 +14,11 @@
         "ecmaVersion": 12
     },
     "rules": {
+        "comma-dangle": [1, "never"],
+        "consistent-return": [0],
+        "dot-notation": [0],
         "indent": [1, 4],
-        "template-curly-spacing": [1, "always"],
         "no-use-before-define": [0],
-        "comma-dangle": [1, "never"]
+        "template-curly-spacing": [1, "always"],
     }
 }

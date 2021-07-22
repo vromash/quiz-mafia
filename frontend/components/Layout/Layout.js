@@ -1,8 +1,16 @@
 import Head from 'next/head';
 import { PureComponent } from 'react';
+import { connect } from 'react-redux';
 import styles from '../../styles/Layout.module.scss';
+import { idAdded as sessionIdAdded, userIdAdded } from '../../store/session/session';
 
-export default class Layout extends PureComponent {
+const mapStateToProps = (state) => ({ session: state.session });
+const actionCreators = {
+    sessionIdAdded,
+    userIdAdded
+};
+
+class Layout extends PureComponent {
     renderHead() {
         return (
             <Head>
@@ -23,3 +31,14 @@ export default class Layout extends PureComponent {
         );
     }
 }
+
+export default Layout;
+
+// export async function getServerSideProps() {
+
+//     return {
+//         props: {
+//             test: 1
+//         }
+//     };
+// }

@@ -1,8 +1,17 @@
 import { PureComponent } from 'react';
 import { withRouter } from 'next/router';
-import socket from '../lib/socket';
+import { connect } from 'react-redux';
 import Layout from '../components/Layout/Layout';
 import styles from '../styles/Home.module.scss';
+import { getActiveGames } from '../lib/fetch';
+import withSocket from '../hoc/withSocket';
+import { addId, addPlayers } from '../store/game';
+
+const mapStateToProps = (state) => ({ game: state.game });
+const actionCreators = {
+    addId,
+    addPlayers
+};
 
 class Home extends PureComponent {
     constructor(props) {
@@ -10,30 +19,38 @@ class Home extends PureComponent {
 
         this.state = {
             username: '',
-            rooms: 0,
-            roomName: ''
+            activeGames: 0,
+            roomId: ''
         };
     }
 
     componentDidMount() {
+        const { socket, activeGames } = this.props;
+
+        this.setState({ activeGames });
+
         socket.on('gameCreated', this.redirectToGamePage);
-        socket.on('gameJoined', this.redirectToGamePage);
-        socket.on('rooms', (rooms) => {
-            console.log(rooms);
-            this.setState({ rooms });
-        });
-        socket.on('newGameCreated', () => {
+        socket.on('playerJoined', this.redirectToGamePage);
+
+        socket.on('GameCreated', () => {
             this.setState((prevState) => ({
-                rooms: prevState.rooms + 1
+                activeGames: prevState.activeGames + 1
+            }));
+        });
+        socket.on('GameEnded', () => {
+            this.setState((prevState) => ({
+                activeGames: prevState.activeGames - 1
             }));
         });
     }
 
-    // eslint-disable-next-line class-methods-use-this
     componentWillUnmount() {
+        const { socket } = this.props;
+
         socket.off('gameCreated');
-        socket.off('gameJoined');
-        socket.off('newGameCreated');
+        socket.off('playerJoined');
+        socket.off('GameCreated');
+        socket.off('GameEnded');
     }
 
     handleUsernameChange = (event) => {
@@ -43,22 +60,26 @@ class Home extends PureComponent {
     };
 
     handleCreateGame = () => {
-        socket.emit('newGame', { username: this.state.username });
+        const { socket, session: { userId } } = this.props;
+        socket.emit('createGame', { id: userId, username: this.state.username });
     }
 
     handleRoomNameChange = (event) => {
         this.setState(() => ({
-            roomName: event.target.value
+            roomId: event.target.value
         }));
     }
 
     handleJoinGame = () => {
-        socket.emit('joinGame', { username: this.state.username, roomName: this.state.roomName });
+        const { socket, session: { userId } } = this.props;
+        const { username, roomId } = this.state;
+        socket.emit('joinGame', { id: userId, username, roomId });
     }
 
-    redirectToGamePage = ({ roomName, allPlayers }) => {
-        localStorage.setItem('players', JSON.stringify(allPlayers));
-        this.props.router.push(`/game/${roomName}`);
+    redirectToGamePage = ({ gameId, roomId, allPlayers }) => {
+        this.props.addId(gameId);
+        this.props.addPlayers(allPlayers);
+        this.props.router.push(`/game/${roomId}`);
     }
 
     renderWelcome() {
@@ -103,7 +124,7 @@ class Home extends PureComponent {
     renderActiveRoomNumber() {
         return (
             <>
-                Current active games: {this.state.rooms}
+                Current active games: {this.state.activeGames}
             </>
         );
     }
@@ -131,4 +152,14 @@ class Home extends PureComponent {
     }
 }
 
-export default withRouter(Home);
+export default connect(mapStateToProps, actionCreators)(withRouter(withSocket(Home)));
+
+export async function getServerSideProps() {
+    const { activeGames } = await getActiveGames();
+
+    return {
+        props: {
+            activeGames
+        }
+    };
+}

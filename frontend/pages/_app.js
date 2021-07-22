@@ -1,31 +1,20 @@
 import { PureComponent } from 'react';
+import { Provider } from 'react-redux';
+
 import '../styles/globals.scss';
-import socket from '../lib/socket';
+import { PersistGate } from 'redux-persist/integration/react';
+import { store, persistor } from '../store/index';
 
 class App extends PureComponent {
-    componentDidMount() {
-        const sessionID = localStorage.getItem('sessionID');
-        if (sessionID) {
-            socket.auth = { sessionID };
-        }
-
-        socket.connect();
-        socket.on('session', ({ sessionID, userID }) => {
-            // save session data to the next reconnection attempts
-            socket.auth = { sessionID };
-            socket.userID = userID;
-            localStorage.setItem('sessionID', sessionID);
-        });
-    }
-
-    componentWillUnmount() {
-        socket.off('connect_error');
-        socket.off('session');
-    }
-
     render() {
         const { Component: CurrentComponent, pageProps } = this.props;
-        return <CurrentComponent {...pageProps} />;
+        return (
+            <Provider store={store}>
+                <PersistGate loading={null} persistor={persistor}>
+                    <CurrentComponent {...pageProps} />
+                </PersistGate>
+            </Provider>
+        );
     }
 }
 

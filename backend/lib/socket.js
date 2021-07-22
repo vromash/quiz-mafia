@@ -1,11 +1,10 @@
 /* eslint-disable no-param-reassign */
 const socketIO = require('socket.io');
 const randomString = require('crypto-random-string');
-const { InMemoryStore, InMemoryGameControllerStore } = require('./store');
-const { GameController } = require('./gameController');
 
-const gameStore = new InMemoryGameControllerStore();
-const sessionStore = new InMemoryStore();
+const { User } = require('../models/User');
+const { Game, STATUSES: gameStatuses } = require('../models/Game');
+const { sanitizeModel } = require('./database');
 
 module.exports = {
     socket: (server) => {
@@ -15,102 +14,192 @@ module.exports = {
             }
         });
 
-        io.use((client, next) => {
-            const { sessionID = undefined } = client.handshake.auth;
+        io.use(async (client, next) => {
+            const { sessionId = undefined } = client.handshake.auth;
 
             // Return saved session
-            if (sessionID) {
-                const session = sessionStore.find(sessionID);
-                if (session) {
-                    client.sessionID = sessionID;
-                    client.userID = session.userID;
+            if (sessionId) {
+                let user;
+                try {
+                    user = await User.findOne({ sessionId }).exec();
+                } catch (e) {
+                    console.log(e);
+                }
+
+                if (user) {
+                    client.userId = user.id;
+                    client.sessionId = user.sessionId;
                     return next();
                 }
             }
 
-            // Create new session and user if sessionID doesn't exist
-            client.sessionID = randomString(8);
-            client.userID = randomString(8);
+            const newUser = new User({
+                id: randomString(8),
+                sessionId: randomString(8)
+            });
+
+            try {
+                newUser.save();
+            } catch (e) {
+                console.error(e);
+            }
+
+            // Create new session and user if sessionId doesn't exist
+            client.userId = newUser.id;
+            client.sessionId = newUser.sessionId;
+
+            // Send session data to user
+            client.emit('session', {
+                userId: newUser.id,
+                sessionId: newUser.sessionId
+            });
+
             return next();
         });
 
         io.on('connection', (client) => {
-            const handleNewGame = ({ username }) => {
-                const roomName = randomString(5);
-                const gc = new GameController(roomName);
+            const handleCreateGame = async ({ id, username }) => {
+                let user;
+                try {
+                    user = await User.findOne({ id }).exec();
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('userNotFound');
+                    return;
+                }
 
-                gc.addUser(client.userID, username);
-                gameStore.save(roomName, gc);
+                const newGameDoc = new Game({
+                    id: randomString(8),
+                    roomId: randomString(5),
+                    players: [{
+                        // eslint-disable-next-line no-underscore-dangle
+                        _id: user['_id'],
+                        id: user.id,
+                        username
+                    }],
+                    status: gameStatuses.pending
+                });
+
+                try {
+                    newGameDoc.save();
+                } catch (e) {
+                    console.error(e);
+                }
+
+                const newGameObject = newGameDoc.toObject();
 
                 // Informing sender
-                client.join(roomName);
-                io.to(client.id).emit('gameCreated', { roomName, allPlayers: [{ id: client.userID, username }] });
-                // Informing all clients
-                client.broadcast.emit('newGameCreated');
-                console.log('joined new player');
+                client.join(newGameObject.roomId);
+
+                io.to(client.id).emit('gameCreated', {
+                    gameId: newGameObject.id,
+                    roomId: newGameObject.roomId,
+                    allPlayers: newGameObject.players.map((el) => sanitizeModel(el))
+                });
+
+                // Informing all users
+                client.broadcast.emit('GameCreated');
             };
 
-            const handleJoinGame = ({ roomName, username }) => {
-                // Updating gc in store
-                const gc = gameStore.find(roomName);
-                gc.addUser(client.userID, username);
-                gameStore.save(roomName, gc);
+            const handleJoinGame = async ({ roomId, id, username }) => {
+                let userDoc;
+                let gameDoc;
+                try {
+                    userDoc = await User.findOne({ id }).exec();
+                    gameDoc = await Game.findOne({ roomId }).exec();
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('userNotFound');
+                    return;
+                }
 
-                const allPlayers = gc.getAllPlayers();
+                gameDoc.players.push({
+                    // eslint-disable-next-line no-underscore-dangle
+                    _id: userDoc['_id'],
+                    id: userDoc.id,
+                    username
+                });
+
+                try {
+                    gameDoc.save();
+                } catch (e) {
+                    console.error(e);
+                }
+
+                const foundGameObject = gameDoc.toObject();
 
                 // Join room and inform users
-                client.join(roomName);
-                io.to(client.id).emit('gameJoined', { roomName, allPlayers });
-                client.in(roomName).emit('playerJoined', { id: client.userID, username });
+                client.join(foundGameObject.roomId);
+                io.to(client.id).emit('playerJoined', {
+                    gameId: foundGameObject.id,
+                    roomId: foundGameObject.roomId,
+                    allPlayers: foundGameObject.players.map((el) => sanitizeModel(el))
+                });
+                client.in(foundGameObject.roomId).emit('PlayerJoined', { id: client.userId, username });
             };
 
-            const handleLeaveGame = ({ roomName }) => {
-                const gc = gameStore.find(roomName);
-                gc.removeUser(client.userID);
-                gameStore.save(roomName, gc);
+            const handleLeaveGame = async ({ gameId, userId }) => {
+                let gameDoc;
+                try {
+                    gameDoc = await Game.findOne({ id: gameId }).exec();
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('userNotFound');
+                    return;
+                }
+
+                let updatedGameDoc;
+                try {
+                    // TODO: rework removePlayer
+                    await gameDoc.removePlayer(userId);
+                    updatedGameDoc = await Game.findOne({ id: gameId }).exec();
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('failedToRemove');
+                    return;
+                }
 
                 // Leave room and inform users
-                client.leave(roomName);
-                io.to(client.id).emit('gameLeft', { roomName });
-                client.in(roomName).emit('playerLeft', client.userID);
+                client.leave(updatedGameDoc.roomId);
+                io.to(client.id).emit('playerLeft');
+                client.in(updatedGameDoc.roomId).emit('PlayerLeft', client.userId);
 
-                // Finish game if not players left
-                if (gc.getAllPlayers().length <= 0) {
-                    gc.updateStatus(GameController.phases.finished);
-                    gameStore.save(roomName, gc);
-                    client.emit('playerLeft', client.userID);
+                // Finish game if no players left
+                if (updatedGameDoc.players.length <= 0) {
+                    try {
+                        updatedGameDoc.status = gameStatuses.finished;
+                        updatedGameDoc.save();
+                    } catch (e) {
+                        console.error(e);
+                        io.to(client.id).emit('somethingFailed');
+                        return;
+                    }
+                    io.emit('GameEnded');
                 }
             };
 
-            const handleConnect = () => {
+            const handleConnect = async () => {
                 // Add or update session in db
-                sessionStore.save(client.sessionID, {
-                    userID: client.userID,
-                    connected: true
-                });
-
-                // Send session data to user
-                client.emit('session', {
-                    sessionID: client.sessionID,
-                    userID: client.userID
-                });
-
-                client.emit('rooms', gameStore.findNotFinished().length);
-                console.log('connected!');
+                try {
+                    await User.updateOne({ id: client.userId }, { connected: true });
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('somethingFailed');
+                }
             };
 
-            const handleDisconnect = () => {
-                // TODO: add cron to remove room after last player disconnected
-
-                sessionStore.save(client.sessionID, {
-                    userID: client.userID,
-                    connected: false
-                });
+            const handleDisconnect = async () => {
+                try {
+                    await User.updateOne({ id: client.userId }, { connected: false });
+                } catch (e) {
+                    console.error(e);
+                    io.to(client.id).emit('somethingFailed');
+                }
             };
 
             handleConnect();
 
-            client.on('newGame', handleNewGame);
+            client.on('createGame', handleCreateGame);
             client.on('joinGame', handleJoinGame);
             client.on('leaveGame', handleLeaveGame);
             client.on('disconnect', handleDisconnect);
