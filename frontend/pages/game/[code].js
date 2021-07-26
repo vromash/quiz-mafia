@@ -54,7 +54,7 @@ class Game extends PureComponent {
     }
 
     handleLeaveGame = () => {
-        this.props.socket.emit('leaveGame', { gameId: this.props.game.id, userId: this.props.session.userId, roomId: this.state.roomId });
+        this.props.socket.emit('leaveGame', { gameId: this.props.game.id, userId: this.props.session.userId });
     }
 
     renderPlayers() {

@@ -14,7 +14,8 @@ const GameSchema = new Schema({
     players: [{
         _id: Schema.Types.ObjectId,
         id: String,
-        username: String
+        username: String,
+        isInRoom: Boolean
     }],
     status: {
         type: String,
@@ -30,6 +31,10 @@ GameSchema.methods.removePlayer = function (id) {
 
 GameSchema.statics.getActiveNumber = function () {
     return this.countDocuments({ status: { $in: [STATUSES.pending, STATUSES.active] } });
+};
+
+GameSchema.statics.isUserInGame = function (id) {
+    return this.findOne({ 'players.id': id }).where({ status: { $in: [STATUSES.pending, STATUSES.active] } });
 };
 
 const Game = mongoose.model('Game', GameSchema);

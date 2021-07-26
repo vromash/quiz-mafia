@@ -3,14 +3,26 @@ import { withRouter } from 'next/router';
 import { connect } from 'react-redux';
 import Layout from '../components/Layout/Layout';
 import styles from '../styles/Home.module.scss';
-import { getActiveGames } from '../lib/fetch';
+import { getActiveGames, isUserInGame } from '../lib/fetch';
 import withSocket from '../hoc/withSocket';
-import { addId, addPlayers } from '../store/game';
+import {
+    addId,
+    addPlayers,
+    updateInGameStatus,
+    updateGameData,
+    resetGameData,
+    removeAllPlayers
+} from '../store/game';
+import CardButton from '../components/CardButton/CardButton';
 
 const mapStateToProps = (state) => ({ game: state.game });
 const actionCreators = {
     addId,
-    addPlayers
+    addPlayers,
+    updateInGameStatus,
+    updateGameData,
+    resetGameData,
+    removeAllPlayers
 };
 
 class Home extends PureComponent {
@@ -28,6 +40,7 @@ class Home extends PureComponent {
         const { socket, activeGames } = this.props;
 
         this.setState({ activeGames });
+        this.getIsUserInGame();
 
         socket.on('gameCreated', this.redirectToGamePage);
         socket.on('playerJoined', this.redirectToGamePage);
@@ -53,6 +66,15 @@ class Home extends PureComponent {
         socket.off('GameEnded');
     }
 
+    getIsUserInGame = async () => {
+        if (!this.props.session.userId) {
+            return;
+        }
+
+        const game = await isUserInGame(this.props.session.userId);
+        this.props.updateGameData(game);
+    }
+
     handleUsernameChange = (event) => {
         this.setState(() => ({
             username: event.target.value
@@ -74,6 +96,18 @@ class Home extends PureComponent {
         const { socket, session: { userId } } = this.props;
         const { username, roomId } = this.state;
         socket.emit('joinGame', { id: userId, username, roomId });
+    }
+
+    handleRejoinGame = () => {
+        const { socket, session: { userId }, game: { roomId } } = this.props;
+        const { username } = this.state;
+        socket.emit('joinGame', { id: userId, username, roomId });
+    }
+
+    handleLeaveGame = () => {
+        this.props.removeAllPlayers();
+        this.props.resetGameData();
+        this.props.socket.emit('leaveGame', { gameId: this.props.game.id, userId: this.props.session.userId });
     }
 
     redirectToGamePage = ({ gameId, roomId, allPlayers }) => {
@@ -103,9 +137,7 @@ class Home extends PureComponent {
     renderCreateGame() {
         return (
             <div className={styles.column_el}>
-                <button className={styles.card} type="button" onClick={this.handleCreateGame}>
-                    <h2 className={styles.create}>Create new game &rarr;</h2>
-                </button>
+                <CardButton labelStyles={styles.create} label="Create new game &rarr;" handleButtonClick={this.handleCreateGame} />
             </div>
         );
     }
@@ -113,10 +145,34 @@ class Home extends PureComponent {
     renderJoinGame() {
         return (
             <div className={styles.column_el}>
-                <div className={styles.card} type="button">
-                    <button type="button" onClick={this.handleJoinGame}><h2>Join existing game &rarr;</h2></button>
-                    <input className={styles.input} type="text" value={this.state.roomName} onChange={this.handleRoomNameChange} placeholder="12345" />
-                </div>
+                <CardButton
+                    label="Join existing game &rarr;"
+                    handleButtonClick={this.handleJoinGame}
+                >
+                    <input
+                        className={styles.input}
+                        type="text"
+                        value={this.state.roomId}
+                        onChange={this.handleRoomNameChange}
+                        placeholder="12345"
+                    />
+                </CardButton>
+            </div>
+        );
+    }
+
+    renderRejoinGame() {
+        return (
+            <div className={styles.column_el}>
+                <CardButton label="Rejoin game &rarr;" handleButtonClick={this.handleRejoinGame} />
+            </div>
+        );
+    }
+
+    renderLeaveGame() {
+        return (
+            <div className={styles.column_el}>
+                <CardButton label="Leave game &rarr;" handleButtonClick={this.handleLeaveGame} />
             </div>
         );
     }
@@ -134,8 +190,8 @@ class Home extends PureComponent {
             <div className={styles.grid}>
                 {this.renderUsername()}
                 <div className={styles.columns}>
-                    {this.renderCreateGame()}
-                    {this.renderJoinGame()}
+                    { this.props.game.inGame ? this.renderRejoinGame() : this.renderCreateGame() }
+                    { this.props.game.inGame ? this.renderLeaveGame() : this.renderJoinGame() }
                 </div>
             </div>
         );
@@ -159,7 +215,7 @@ export async function getServerSideProps() {
 
     return {
         props: {
-            activeGames
+            activeGames: activeGames || 0
         }
     };
 }

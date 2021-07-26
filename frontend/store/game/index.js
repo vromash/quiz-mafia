@@ -3,6 +3,8 @@ import { createSlice } from '@reduxjs/toolkit';
 
 const initialState = {
     id: '',
+    roomId: '',
+    inGame: false,
     players: {}
 };
 
@@ -15,6 +17,19 @@ const gameSlice = createSlice({
         },
         removeId(state) {
             state.id = '';
+        },
+        updateInGameStatus(state, action) {
+            state.inGame = action.payload;
+        },
+        updateGameData(state, action) {
+            state.inGame = action.payload.inGame;
+            state.id = action.payload.gameId;
+            state.roomId = action.payload.roomId;
+        },
+        resetGameData(state, action) {
+            state.inGame = initialState.inGame;
+            state.id = initialState.gameId;
+            state.roomId = initialState.roomId;
         },
         addPlayer(state, action) {
             state.players[action.payload.id] = action.payload;
@@ -36,6 +51,9 @@ const gameSlice = createSlice({
 export const {
     addId,
     removeId,
+    updateInGameStatus,
+    updateGameData,
+    resetGameData,
     addPlayer,
     addPlayers,
     removePlayer,
