@@ -139,44 +139,6 @@ module.exports = {
                 client.in(foundGameObject.roomId).emit('PlayerJoined', { id: client.userId, username });
             };
 
-            const handleRejoinGame = async ({ roomId, id, username }) => {
-                let userDoc;
-                let gameDoc;
-                try {
-                    userDoc = await User.findOne({ id }).exec();
-                    gameDoc = await Game.findOne({ roomId }).exec();
-                } catch (e) {
-                    console.error(e);
-                    io.to(client.id).emit('userNotFound');
-                    return;
-                }
-
-                gameDoc.players.push({
-                    // eslint-disable-next-line no-underscore-dangle
-                    _id: userDoc['_id'],
-                    id: userDoc.id,
-                    username
-                });
-
-                try {
-                    gameDoc.save();
-                } catch (e) {
-                    console.error(e);
-                }
-
-                const foundGameObject = gameDoc.toObject();
-
-                // Join room and inform users
-                client.join(foundGameObject.roomId);
-                io.to(client.id).emit('playerJoined', {
-                    gameId: foundGameObject.id,
-                    roomId: foundGameObject.roomId,
-                    allPlayers: foundGameObject.players.map((el) => sanitizeModel(el))
-                });
-                client.in(foundGameObject.roomId).emit('PlayerJoined', { id: client.userId, username });
-            };
-
-
             const handleLeaveGame = async ({ gameId, userId }) => {
                 let gameDoc;
                 try {
